@@ -249,6 +249,7 @@ The following parameters are optional:
 * `range_start` : First IP to use when allocating from the `range`. Optional, if unset is inferred from the `range`.
 * `range_end` : Last IP to use when allocating from the `range`. Optional, if unset the last ip within the range is determined.
 * `exclude`: This is a list of CIDRs to be excluded from being allocated. 
+* `assign_prefix` : Overrides the prefix length stamped on the address handed to the pod, independently of the `range` (and of `node_slice_size`). For example, with `range: "192.168.2.0/22"` and `assign_prefix: 32`, addresses are still allocated from the `/22` pool but the pod receives `.../32`. Must be at least as specific as the `range` prefix and no wider than the address size (`/32` for IPv4, `/128` for IPv6). This is useful when the pod should treat every peer as off-link (point-to-point L3), e.g. KubeVirt bridge binding that copies the CNI mask into the guest.
 
 In the example, we exclude IP addresses in the range `192.168.2.229/30` from being allocated (in this case it's 3 addresses, `.229, .230, .231`), as well as `192.168.2.236/32` (just a single address).
 

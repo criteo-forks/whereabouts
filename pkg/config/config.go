@@ -81,10 +81,11 @@ func LoadIPAMConfig(bytes []byte, envArgs string, extraConfigPaths ...string) (*
 	if n.IPAM.Range != "" {
 
 		oldRange := types.RangeConfiguration{
-			OmitRanges: n.IPAM.OmitRanges,
-			Range:      n.IPAM.Range,
-			RangeStart: n.IPAM.RangeStart,
-			RangeEnd:   n.IPAM.RangeEnd,
+			OmitRanges:   n.IPAM.OmitRanges,
+			Range:        n.IPAM.Range,
+			RangeStart:   n.IPAM.RangeStart,
+			RangeEnd:     n.IPAM.RangeEnd,
+			AssignPrefix: n.IPAM.AssignPrefix,
 		}
 
 		n.IPAM.IPRanges = append([]types.RangeConfiguration{oldRange}, n.IPAM.IPRanges...)
@@ -116,6 +117,21 @@ func LoadIPAMConfig(bytes []byte, envArgs string, extraConfigPaths ...string) (*
 			if n.IPAM.IPRanges[idx].RangeStart == nil {
 				firstip = netutils.ParseIPSloppy(firstip.Mask(ipNet.Mask).String()) // if range_start is not net then pick the first network address
 				n.IPAM.IPRanges[idx].RangeStart = firstip
+			}
+		}
+
+		// assign_prefix (optional) overrides the prefix stamped on the assigned
+		// address. It must be at least as specific as the range prefix and no
+		// wider than the address size, otherwise the pod would claim an on-link
+		// scope larger than the pool.
+		if p := n.IPAM.IPRanges[idx].AssignPrefix; p != 0 {
+			_, ipNet, err := netutils.ParseCIDRSloppy(n.IPAM.IPRanges[idx].Range)
+			if err != nil {
+				return nil, "", fmt.Errorf("invalid CIDR %s: %s", n.IPAM.IPRanges[idx].Range, err)
+			}
+			ones, bits := ipNet.Mask.Size()
+			if p < ones || p > bits {
+				return nil, "", fmt.Errorf("assign_prefix /%d for range %s must be between the range prefix /%d and /%d", p, ipNet.String(), ones, bits)
 			}
 		}
 	}

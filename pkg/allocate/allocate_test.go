@@ -415,4 +415,36 @@ var _ = Describe("Allocation operations", func() {
 			})
 		})
 	})
+
+	Context("AssignIP with assign_prefix", func() {
+		It("stamps the range prefix on the address by default", func() {
+			out, _, err := AssignIP(types.RangeConfiguration{Range: "192.168.1.0/24"}, nil, "0xcafe", "default/pod1", "")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(out.String()).To(Equal("192.168.1.1/24"))
+		})
+
+		It("overrides the IPv4 prefix (e.g. /32) without moving the allocation", func() {
+			out, _, err := AssignIP(types.RangeConfiguration{Range: "192.168.1.0/24", AssignPrefix: 32}, nil, "0xcafe", "default/pod1", "")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(out.IP.String()).To(Equal("192.168.1.1"))
+			ones, bits := out.Mask.Size()
+			Expect(ones).To(Equal(32))
+			Expect(bits).To(Equal(32))
+		})
+
+		It("overrides the IPv6 prefix (e.g. /128)", func() {
+			out, _, err := AssignIP(types.RangeConfiguration{Range: "caa5::0/112", AssignPrefix: 128}, nil, "0xcafe", "default/pod1", "")
+			Expect(err).NotTo(HaveOccurred())
+			ones, bits := out.Mask.Size()
+			Expect(ones).To(Equal(128))
+			Expect(bits).To(Equal(128))
+		})
+
+		It("preserves the override for an already-reserved podRef", func() {
+			res := []types.IPReservation{{IP: net.ParseIP("192.168.1.7"), PodRef: "default/pod1", IfName: ""}}
+			out, _, err := AssignIP(types.RangeConfiguration{Range: "192.168.1.0/24", AssignPrefix: 32}, res, "0xcafe", "default/pod1", "")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(out.String()).To(Equal("192.168.1.7/32"))
+		})
+	})
 })

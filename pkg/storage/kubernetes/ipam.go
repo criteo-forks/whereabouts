@@ -540,6 +540,34 @@ func getNodeSliceName(ipam *KubernetesIPAM) string {
 	return ipam.Config.NetworkName
 }
 
+// narrowRangeToNodeSlice constrains a range configuration to a single node's
+// slice: the allocatable window (RangeStart/RangeEnd) is clamped to the slice
+// CIDR, while Range (the parent pool) and AssignPrefix are carried over
+// unchanged. Preserving those two here is what keeps the prefix stamped on the
+// pod's address tied to the pool (or to the assign_prefix override) rather than
+// to the slice — dropping either would silently rewrite the mask handed to the
+// pod (e.g. a /27 slice mask instead of the intended /22 pool or /32 override).
+func narrowRangeToNodeSlice(ipRange whereaboutstypes.RangeConfiguration, nodeSliceRange string) (whereaboutstypes.RangeConfiguration, error) {
+	_, ipNet, err := net.ParseCIDR(nodeSliceRange)
+	if err != nil {
+		return whereaboutstypes.RangeConfiguration{}, fmt.Errorf("parsing node slice cidr %q: %w", nodeSliceRange, err)
+	}
+	rangeStart, err := iphelpers.FirstUsableIP(*ipNet)
+	if err != nil {
+		return whereaboutstypes.RangeConfiguration{}, fmt.Errorf("node slice %q range start: %w", nodeSliceRange, err)
+	}
+	rangeEnd, err := iphelpers.LastUsableIP(*ipNet)
+	if err != nil {
+		return whereaboutstypes.RangeConfiguration{}, fmt.Errorf("node slice %q range end: %w", nodeSliceRange, err)
+	}
+	return whereaboutstypes.RangeConfiguration{
+		Range:        ipRange.Range,
+		RangeStart:   rangeStart,
+		RangeEnd:     rangeEnd,
+		AssignPrefix: ipRange.AssignPrefix,
+	}, nil
+}
+
 // IPManagementKubernetesUpdate manages k8s updates
 func IPManagementKubernetesUpdate(ctx context.Context, mode int, ipam *KubernetesIPAM, ipamConf whereaboutstypes.IPAMConfig) ([]net.IPNet, error) {
 	logging.Debugf("IPManagement -- mode: %d / containerID: %q / podRef: %q / ifName: %q ", mode, ipam.ContainerID, ipamConf.GetPodRef(), ipam.IfName)
@@ -596,26 +624,11 @@ func IPManagementKubernetesUpdate(ctx context.Context, mode int, ipam *Kubernete
 				if err != nil {
 					return newips, err
 				}
-				_, ipNet, err := net.ParseCIDR(nodeSliceRange)
-				if err != nil {
-					logging.Errorf("Error parsing node slice cidr to net.IPNet: %v", err)
-					return newips, err
-				}
 				poolIdentifier.IpRange = nodeSliceRange
-				rangeStart, err := iphelpers.FirstUsableIP(*ipNet)
+				ipRange, err = narrowRangeToNodeSlice(ipRange, nodeSliceRange)
 				if err != nil {
-					logging.Errorf("Error parsing node slice cidr to range start: %v", err)
+					logging.Errorf("Error narrowing range %s to node slice %s: %v", ipRange.Range, nodeSliceRange, err)
 					return newips, err
-				}
-				rangeEnd, err := iphelpers.LastUsableIP(*ipNet)
-				if err != nil {
-					logging.Errorf("Error parsing node slice cidr to range start: %v", err)
-					return newips, err
-				}
-				ipRange = whereaboutstypes.RangeConfiguration{
-					Range:      ipRange.Range,
-					RangeStart: rangeStart,
-					RangeEnd:   rangeEnd,
 				}
 			}
 			logging.Debugf("using pool identifier: %v", poolIdentifier)

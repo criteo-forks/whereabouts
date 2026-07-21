@@ -43,6 +43,11 @@ type RangeConfiguration struct {
 	Range      string   `json:"range"`
 	RangeStart net.IP   `json:"range_start,omitempty"`
 	RangeEnd   net.IP   `json:"range_end,omitempty"`
+	// AssignPrefix, when > 0, overrides the prefix length stamped on the address
+	// handed to the pod (e.g. /32) instead of inheriting the `range` prefix. The
+	// allocation pool and node_slice_size are unaffected; only the mask reported
+	// in the CNI result changes. Must be within [range prefix, address bits].
+	AssignPrefix int `json:"assign_prefix,omitempty"`
 }
 
 // IPAMConfig describes the expected json configuration for this plugin
@@ -58,6 +63,7 @@ type IPAMConfig struct {
 	NodeSliceSize            string               `json:"node_slice_size"`
 	RangeStart               net.IP               `json:"range_start,omitempty"`
 	RangeEnd                 net.IP               `json:"range_end,omitempty"`
+	AssignPrefix             int                  `json:"assign_prefix,omitempty"`
 	GatewayStr               string               `json:"gateway"`
 	LeaderLeaseDuration      int                  `json:"leader_lease_duration,omitempty"`
 	LeaderRenewDeadline      int                  `json:"leader_renew_deadline,omitempty"`
@@ -89,6 +95,7 @@ func (ic *IPAMConfig) UnmarshalJSON(data []byte) error {
 		Range                    string               `json:"range"`
 		RangeStart               string               `json:"range_start,omitempty"`
 		RangeEnd                 string               `json:"range_end,omitempty"`
+		AssignPrefix             int                  `json:"assign_prefix,omitempty"`
 		GatewayStr               string               `json:"gateway"`
 		EtcdHost                 string               `json:"etcd_host,omitempty"`
 		EtcdUsername             string               `json:"etcd_username,omitempty"`
@@ -131,6 +138,7 @@ func (ic *IPAMConfig) UnmarshalJSON(data []byte) error {
 		Range:                    ipamConfigAlias.Range,
 		RangeStart:               backwardsCompatibleIPAddress(ipamConfigAlias.RangeStart),
 		RangeEnd:                 backwardsCompatibleIPAddress(ipamConfigAlias.RangeEnd),
+		AssignPrefix:             ipamConfigAlias.AssignPrefix,
 		NodeSliceSize:            ipamConfigAlias.NodeSliceSize,
 		GatewayStr:               ipamConfigAlias.GatewayStr,
 		LeaderLeaseDuration:      ipamConfigAlias.LeaderLeaseDuration,

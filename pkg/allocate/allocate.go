@@ -28,6 +28,11 @@ func AssignIP(ipamConf types.RangeConfiguration, reservelist []types.IPReservati
 	// Setup the basics here.
 	_, ipnet, _ := net.ParseCIDR(ipamConf.Range)
 
+	// The prefix stamped on the assigned address defaults to the range prefix,
+	// but can be overridden (e.g. to /32) via assign_prefix without changing the
+	// allocation pool. See assignedMask.
+	mask := assignedMask(*ipnet, ipamConf.AssignPrefix)
+
 	// Verify if podRef and ifName have already an allocation.
 	for i, r := range reservelist {
 		if r.PodRef == podRef && r.IfName == ifName {
@@ -37,7 +42,7 @@ func AssignIP(ipamConf types.RangeConfiguration, reservelist []types.IPReservati
 				reservelist[i].ContainerID = containerID
 			}
 
-			return net.IPNet{IP: r.IP, Mask: ipnet.Mask}, reservelist, nil
+			return net.IPNet{IP: r.IP, Mask: mask}, reservelist, nil
 		}
 	}
 
@@ -46,7 +51,22 @@ func AssignIP(ipamConf types.RangeConfiguration, reservelist []types.IPReservati
 		return net.IPNet{}, nil, err
 	}
 
-	return net.IPNet{IP: newip, Mask: ipnet.Mask}, updatedreservelist, nil
+	return net.IPNet{IP: newip, Mask: mask}, updatedreservelist, nil
+}
+
+// assignedMask returns the netmask to stamp on the assigned address. When
+// assignPrefix > 0 it takes precedence over the range's own prefix (validated in
+// config load to sit within [range prefix, address bits]); otherwise the range
+// prefix is used unchanged.
+func assignedMask(ipnet net.IPNet, assignPrefix int) net.IPMask {
+	if assignPrefix <= 0 {
+		return ipnet.Mask
+	}
+	bits := 32
+	if ipnet.IP.To4() == nil {
+		bits = 128
+	}
+	return net.CIDRMask(assignPrefix, bits)
 }
 
 // DeallocateIP removes allocation from reserve list. Returns the updated reserve list and the deallocated IP.
